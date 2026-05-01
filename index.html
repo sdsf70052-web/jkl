@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>CSV → VLESS 智能节点处理工作台</title>
+  <style>
+    :root {
+      --bg: #f8fafc; --surface: #ffffff; --text: #0f172a; --text-secondary: #475569;
+      --border: #e2e8f0; --primary: #2563eb; --primary-hover: #1d4ed8;
+      --success: #10b981; --error: #ef4444; --warning: #f59e0b;
+      --radius: 10px; --shadow: 0 2px 8px rgba(0,0,0,0.06);
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1120; --surface: #151b2b; --text: #e2e8f0; --text-secondary: #94a3b8;
+        --border: #334155; --primary: #60a5fa; --primary-hover: #3b82f6;
+        --shadow: 0 2px 8px rgba(0,0,0,0.3);
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; padding: 16px; transition: 0.2s; overflow-x: hidden; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+    h1 { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg, var(--primary), #8b5cf6); -webkit-background-clip: text; color: transparent; }
+    .btn { padding: 10px 14px; border: none; border-radius: var(--radius); cursor: pointer; font-weight: 500; transition: 0.15s; display: inline-flex; align-items: center; gap: 6px; font-size: 0.95rem; touch-action: manipulation; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 14px; box-shadow: var(--shadow); }
+    .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+
+    /* 移动端优化文件上传区 */
+    .file-drop { 
+      border: 2px dashed var(--border); border-radius: var(--radius); padding: 24px 16px; 
+      text-align: center; cursor: pointer; transition: 0.2s; position: relative; 
+      touch-action: manipulation; user-select: none;
+    }
+    .file-drop:hover, .file-drop.active { border-color: var(--primary); background: rgba(37,99,235,0.04); }
+    .file-drop input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; z-index: 2; cursor: pointer; }
+    .file-drop .icon { font-size: 2rem; margin-bottom: 8px; display: block; }
+    
+    .info-box { padding: 10px; border-radius: var(--radius); margin-top: 10px; font-size: 0.85rem; display: none; line-height: 1.5; }
+    .info-box.warn { background: #fef3c7; color: #92400e; display: block; }    .info-box.success { background: #d1fae5; color: #065f46; display: block; }
+    .info-box.error { background: #fee2e2; color: #991b1b; display: block; }
+
+    .table-wrapper { overflow-x: auto; margin-top: 10px; max-height: 180px; border: 1px solid var(--border); border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+    th { background: var(--bg); position: sticky; top: 0; z-index: 1; font-weight: 600; }
+    th.editable { cursor: pointer; color: var(--primary); text-decoration: underline dotted; }
+    th.editable::after { content: " ✏️"; opacity: 0.5; font-size: 0.7em; }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-secondary); }
+    input, select { padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 1rem; -webkit-appearance: none; }
+    input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,0.2); }
+    details { margin-top: 8px; }
+    details summary { cursor: pointer; font-weight: 500; color: var(--text-secondary); padding: 6px 0; touch-action: manipulation; }
+
+    .output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+    textarea { width: 100%; min-height: 120px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); font-family: monospace; font-size: 0.9rem; resize: vertical; }
+    .actions { display: flex; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
+    .actions .btn { flex: 1; min-width: 0; justify-content: center; padding: 12px; font-size: 1rem; }
+
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); padding: 12px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 4px 12px rgba(0,0,0,0.15); opacity: 0; transition: 0.3s; z-index: 999; font-size: 0.9rem; text-align: center; max-width: 90vw; }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .toast.success { border-left: 4px solid var(--success); }
+    .toast.error { border-left: 4px solid var(--error); }
+
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+      h1 { font-size: 1.2rem; }
+      .card { padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>CSV → VLESS 智能节点处理工作台</h1>
+      <button class="btn btn-secondary" id="btn-reset">🔄 重置清空</button>
+    </header>
+
+    <section class="card">
+      <div class="card-title">📥 上传 CSV 文件</div>
+      <label class="file-drop" id="drop-zone">
+        <input type="file" id="csv-file" accept=".csv,text/csv">
+        <span class="icon">📄</span>
+        <span>点击选择 CSV 文件 或 拖拽至此处</span>
+      </label>
+      <div class="info-box warn" id="header-hint">⚡ 已检测到无标准表头：点击 <b>列1、列2</b> 可修改为“数据中心/地区/延迟”等，右侧将自动合成节点名。</div>
+      <div class="table-wrapper">        <table id="preview-table">
+          <thead><tr><th>等待数据...</th></tr></thead>
+          <tbody><tr><td>...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">🔧 配置 VLESS 全局参数</div>
+      <div class="form-grid">
+        <label>UUID <input type="text" id="cfg-uuid" placeholder="留空则逐行自动补全" spellcheck="false"></label>
+        <label>加密方式 <select id="cfg-encryption"><option value="none">none</option><option value="auto">auto</option><option value="chacha20-poly1305">chacha20-poly1305</option></select></label>
+        <label>传输协议 <select id="cfg-type"><option value="ws">ws</option><option value="grpc">grpc</option><option value="tcp">tcp</option><option value="http">http</option></select></label>
+        <label>安全层 <select id="cfg-security"><option value="tls">tls</option><option value="reality">reality</option><option value="none">none</option></select></label>
+        <label>指纹 (fp) <select id="cfg-fp"><option value="chrome">chrome</option><option value="firefox">firefox</option><option value="safari">safari</option><option value="edge">edge</option><option value="ios">ios</option><option value="random">random</option></select></label>
+        <label>跳过证书验证 <select id="cfg-insecure"><option value="0">否 (0)</option><option value="1">是 (1)</option></select></label>
+        <label>SNI <input type="text" id="cfg-sni" placeholder="默认同 Host"></label>
+        <label>Host <input type="text" id="cfg-host" placeholder="WebSocket/HTTP Host"></label>
+        <label>Path <input type="text" id="cfg-path" value="/?ed=2560" placeholder="路径参数"></label>
+      </div>
+
+      <details>
+        <summary>🔍 更多高级选项 (ECH/DNS)</summary>
+        <div class="form-grid" style="margin-top: 10px;">
+          <label>EchConfig DNS服务
+            <select id="cfg-dns">
+              <option value="">未启用</option>
+              <option value="udp://208.67.220.220:443">OpenDNS</option>
+              <option value="udp://149.112.112.112:9953">Quad9</option>
+              <option value="udp://45.90.28.0:5353">NextDNS</option>
+              <option value="udp://188.166.206.224:5003">Tiarap</option>
+              <option value="https://dns.alidns.com/dns-query" selected>阿里 DoH (推荐)</option>
+              <option value="https://sm2.doh.pub/dns-query">腾讯国密 DoH</option>
+              <option value="custom">自定义</option>
+            </select>
+          </label>
+          <label>ECH 解析域名
+            <select id="cfg-ech-domain">
+              <option value="">未启用</option>
+              <option value="cloudflare-ech.com" selected>cloudflare-ech.com</option>
+              <option value="crypto.cloudflare.com">crypto.cloudflare.com</option>
+              <option value="encryptedsni.com">encryptedsni.com</option>
+              <option value="custom">自定义</option>
+            </select>
+          </label>
+          <label id="custom-dns-label" style="display:none">自定义 DNS <input type="text" id="cfg-dns-custom" placeholder="输入完整地址"></label>
+          <label id="custom-ech-label" style="display:none">自定义 ECH域名 <input type="text" id="cfg-ech-custom" placeholder="输入域名"></label>
+        </div>
+      </details>
+    </section>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-generate">🚀 一键生成 VLESS 链接库</button>
+    </div>
+
+    <section class="card">
+      <div class="output-header">
+        <span id="output-count">共记录 0 个节点</span>
+        <button class="btn btn-secondary" id="btn-copy">📋 复制全部内容</button>
+      </div>
+      <textarea id="output-area" readonly placeholder="生成结果将显示在此处..."></textarea>
+    </section>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    (() => {
+      'use strict';
+      // 全局错误捕获（防止手机浏览器静默失败）
+      window.onerror = (msg, url, line) => { console.error(`[JS Error] ${msg} at ${line}`); toast(`⚠️ 脚本异常: ${msg}`, 'error'); return false; };
+      window.onunhandledrejection = e => { console.error('[Promise Error]', e.reason); toast('⚠️ 异步任务失败，请重试', 'error'); };
+
+      const els = {
+        fileInput: document.getElementById('csv-file'),
+        dropZone: document.getElementById('drop-zone'),
+        hint: document.getElementById('header-hint'),
+        tableHead: document.querySelector('#preview-table thead tr'),
+        tableBody: document.querySelector('#preview-table tbody'),
+        cfg: {
+          uuid: document.getElementById('cfg-uuid'), encryption: document.getElementById('cfg-encryption'),
+          type: document.getElementById('cfg-type'), security: document.getElementById('cfg-security'),
+          fp: document.getElementById('cfg-fp'), insecure: document.getElementById('cfg-insecure'),
+          sni: document.getElementById('cfg-sni'), host: document.getElementById('cfg-host'),
+          path: document.getElementById('cfg-path'), dns: document.getElementById('cfg-dns'),
+          echDomain: document.getElementById('cfg-ech-domain'), dnsCustom: document.getElementById('cfg-dns-custom'),
+          echCustom: document.getElementById('cfg-ech-custom')
+        },
+        btnGenerate: document.getElementById('btn-generate'),
+        btnReset: document.getElementById('btn-reset'),
+        btnCopy: document.getElementById('btn-copy'),
+        outputCount: document.getElementById('output-count'),
+        outputArea: document.getElementById('output-area'),
+        toast: document.getElementById('toast'),
+        customDnsLbl: document.getElementById('custom-dns-label'),
+        customEchLbl: document.getElementById('custom-ech-label')
+      };
+
+      const state = { headers: [], rows: [], columnMap: { ip: -1, port: -1, uuid: -1, name: -1 }, generated: [] };
+      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const toast = (msg, type = 'success') => {
+        const t = els.toast; t.textContent = msg; t.className = `toast show ${type}`;
+        setTimeout(() => t.className = 'toast', 2500);
+      };
+      const escapeHtml = str => String(str).replace(/[&<>"']/g, m => ({'&':'&','<':'<','>':'>','"':'"',"'":'''}[m]));
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+
+      // 安全读取文件
+      const readFile = file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = () => reject(new Error('文件读取被中断或格式不支持'));
+        reader.readAsText(file, 'UTF-8');
+      });
+
+      const detectColumns = headers => {
+        const lower = headers.map(h => h.toLowerCase().trim());
+        const map = { ip: -1, port: -1, uuid: -1, name: -1 };
+        lower.forEach((h, i) => {
+          if (/^(ip|地址|addr|server|domain|域名|节点ip)$/i.test(h)) map.ip = i;
+          else if (/^(port|端口|节点端口)$/i.test(h)) map.port = i;
+          else if (/^(uuid|id|用户id|密码)$/i.test(h)) map.uuid = i;
+          else if (/^(name|备注|remark|alias|节点名|名称|城市|地区|数据中心|dc|delay|延迟)$/i.test(h)) map.name = i;
+        });
+        return map;
+      };
+
+      const processCSV = text => {
+        if (!text || text.trim().length < 5) return toast('CSV 内容为空或过短', 'error');
+        const lines = text.replace(/\r\n/g, '\n').split('\n').filter(l => l.trim());
+        if (lines.length < 2) return toast('CSV 至少需包含表头与一行数据', 'error');
+
+        state.headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        state.rows = [];
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+          if (cols.some(c => c)) state.rows.push(cols); // 跳过空行
+        }
+
+        state.columnMap = detectColumns(state.headers);
+        let hasAutoHeader = false;
+        state.headers = state.headers.map((h, i) => {
+          if (!h || /^列\d+$/i.test(h)) { h = `列${i+1}`; hasAutoHeader = true; }
+          return h;
+        });
+
+        els.hint.style.display = hasAutoHeader ? 'block' : 'none';
+        if (hasAutoHeader) {
+          state.columnMap.ip = state.headers.findIndex(h => /^列1$/i.test(h));          state.columnMap.port = state.headers.findIndex(h => /^列2$/i.test(h));
+        }
+        renderTable();
+        toast(`✅ 成功解析 ${state.rows.length} 行数据`);
+      };
+
+      const renderTable = (limit = 50) => {
+        els.tableHead.innerHTML = state.headers.map((h, i) => `<th class="editable" data-idx="${i}">${escapeHtml(h)}</th>`).join('');
+        const frag = document.createDocumentFragment();
+        state.rows.slice(0, limit).forEach(row => {
+          const tr = document.createElement('tr');
+          state.headers.forEach((_, i) => { const td = document.createElement('td'); td.textContent = row[i] || ''; tr.appendChild(td); });
+          frag.appendChild(tr);
+        });
+        els.tableBody.replaceChildren(frag);
+      };
+
+      els.tableHead.addEventListener('click', e => {
+        const th = e.target.closest('th');
+        if (!th) return;
+        const idx = th.dataset.idx, old = state.headers[idx];
+        const newName = prompt(`修改列名 (当前: ${old})`, old);
+        if (newName !== null && newName.trim()) {
+          state.headers[idx] = newName.trim();
+          state.columnMap = detectColumns(state.headers);
+          renderTable();
+          toast('表头已更新，映射关系已刷新');
+        }
+      });
+
+      // ECH 显隐控制
+      ['cfg-dns', 'cfg-ech-domain'].forEach(id => {
+        const sel = els.cfg[id === 'cfg-dns' ? 'dns' : 'echDomain'];
+        sel.addEventListener('change', e => {
+          const isCustom = e.target.value === 'custom';
+          els[id === 'cfg-dns' ? 'customDnsLbl' : 'customEchLbl'].style.display = isCustom ? 'flex' : 'none';
+        });
+      });
+
+      // 文件处理（移动端优化）
+      const handleFile = async (file) => {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.csv')) return toast('请选择 .csv 格式文件', 'error');
+        if (file.size > 8 * 1024 * 1024) return toast('文件过大(>8MB)，建议在电脑端处理', 'error');
+
+        els.dropZone.querySelector('span:not(.icon)').textContent = '⏳ 正在读取文件...';
+        els.dropZone.classList.add('active');
+        try {
+          const text = await readFile(file);
+          await delay(50); // 让 UI 刷新          processCSV(text);
+        } catch (err) {
+          console.error('File Read Error:', err);
+          toast('❌ 读取失败: ' + err.message, 'error');
+        } finally {
+          els.dropZone.querySelector('span:not(.icon)').textContent = '点击选择 CSV 文件 或 拖拽至此处';
+          els.dropZone.classList.remove('active');
+          els.fileInput.value = ''; // 允许重复选择同一文件
+        }
+      };
+
+      els.fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+      
+      // 移动端安全拖拽
+      if (!isTouch) {
+        els.dropZone.addEventListener('dragover', e => { e.preventDefault(); els.dropZone.classList.add('active'); });
+        els.dropZone.addEventListener('dragleave', () => els.dropZone.classList.remove('active'));
+        els.dropZone.addEventListener('drop', e => {
+          e.preventDefault(); els.dropZone.classList.remove('active');
+          if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+        });
+      }
+
+      // 生成逻辑
+      els.btnGenerate.addEventListener('click', async () => {
+        if (state.rows.length === 0) return toast('请先上传并解析 CSV 文件', 'error');
+        els.btnGenerate.disabled = true;
+        els.btnGenerate.textContent = '⏳ 计算中...';
+        
+        try {
+          const cfg = {
+            uuid: els.cfg.uuid.value.trim(),
+            encryption: els.cfg.encryption.value,
+            type: els.cfg.type.value,
+            security: els.cfg.security.value,
+            fp: els.cfg.fp.value,
+            insecure: els.cfg.insecure.value,
+            sni: els.cfg.sni.value.trim(),
+            host: els.cfg.host.value.trim(),
+            path: els.cfg.path.value.trim() || '/?ed=2560',
+            dns: els.cfg.dns.value === 'custom' ? els.cfg.dnsCustom.value.trim() : els.cfg.dns.value,
+            echDomain: els.cfg.echDomain.value === 'custom' ? els.cfg.echCustom.value.trim() : els.cfg.echDomain.value
+          };
+
+          state.generated = [];
+          for (const row of state.rows) {
+            const ip = row[state.columnMap.ip] || '', port = row[state.columnMap.port] || '';
+            const uuid = row[state.columnMap.uuid] || cfg.uuid || crypto.randomUUID();
+            const name = row[state.columnMap.name] || 'Node';
+            if (!ip || !port || isNaN(port)) continue;
+            const params = new URLSearchParams({
+              encryption: cfg.encryption, type: cfg.type, security: cfg.security,
+              fp: cfg.fp, insecure: cfg.insecure, path: cfg.path
+            });
+            if (cfg.sni) params.set('sni', cfg.sni);
+            if (cfg.host) params.set('host', cfg.host);
+            if (cfg.dns) params.set('dns', cfg.dns);
+            if (cfg.echDomain) { params.set('ech', '1'); params.set('ech_domain', cfg.echDomain); }
+
+            state.generated.push(`vless://${encodeURIComponent(uuid)}@${ip}:${port}?${params.toString()}#${encodeURIComponent(name)}`);
+          }
+
+          els.outputArea.value = state.generated.join('\n');
+          els.outputCount.textContent = `✔ 已生成 ${state.generated.length} 个节点`;
+          toast('🎉 生成完成');
+        } catch (err) {
+          console.error('Generation Error:', err);
+          toast('❌ 生成失败: ' + err.message, 'error');
+        } finally {
+          els.btnGenerate.disabled = false;
+          els.btnGenerate.textContent = '🚀 一键生成 VLESS 链接库';
+        }
+      });
+
+      els.btnCopy.addEventListener('click', async () => {
+        if (!state.generated.length) return toast('暂无内容可复制', 'error');
+        try {
+          await navigator.clipboard.writeText(els.outputArea.value);
+          toast('✔ 已复制到剪贴板');
+        } catch {
+          els.outputArea.select();
+          document.execCommand('copy');
+          toast('✔ 已复制 (兼容模式)');
+        }
+      });
+
+      els.btnReset.addEventListener('click', () => {
+        state.headers = []; state.rows = []; state.columnMap = { ip: -1, port: -1, uuid: -1, name: -1 }; state.generated = [];
+        els.tableHead.innerHTML = '<th>等待数据...</th>';
+        els.tableBody.innerHTML = '<tr><td>...</td></tr>';
+        els.outputArea.value = ''; els.outputCount.textContent = '共记录 0 个节点';
+        els.hint.style.display = 'none'; els.fileInput.value = '';
+        toast('🔄 已重置清空');
+      });
+
+      console.log('📱 CSV → VLESS 移动端适配版已就绪 (v2.1)');
+    })();
+  </script>
+</body></html>
